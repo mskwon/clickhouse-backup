@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/AlexAkulov/clickhouse-backup/pkg/custom"
-	"github.com/AlexAkulov/clickhouse-backup/pkg/status"
-	apexLog "github.com/apex/log"
 	"io"
 	"os"
 	"path"
@@ -15,9 +12,13 @@ import (
 	"text/tabwriter"
 
 	"github.com/AlexAkulov/clickhouse-backup/pkg/clickhouse"
+	"github.com/AlexAkulov/clickhouse-backup/pkg/custom"
 	"github.com/AlexAkulov/clickhouse-backup/pkg/metadata"
+	"github.com/AlexAkulov/clickhouse-backup/pkg/status"
 	"github.com/AlexAkulov/clickhouse-backup/pkg/storage"
 	"github.com/AlexAkulov/clickhouse-backup/pkg/utils"
+
+	apexLog "github.com/apex/log"
 )
 
 // List - list backups to stdout from command line
@@ -401,6 +402,9 @@ func (b *Backuper) PrintTables(printAll bool, tablePattern string) error {
 	if err != nil {
 		return err
 	}
+	if err := b.populateBackupShardField(ctx, allTables); err != nil {
+		return err
+	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', tabwriter.DiscardEmptyColumns)
 	for _, table := range allTables {
 		if table.Skip && !printAll {
@@ -416,7 +420,7 @@ func (b *Backuper) PrintTables(printAll bool, tablePattern string) error {
 			}
 			continue
 		}
-		if bytes, err := fmt.Fprintf(w, "%s.%s\t%s\t%v\t\n", table.Database, table.Name, utils.FormatBytes(table.TotalBytes), strings.Join(tableDisks, ",")); err != nil {
+		if bytes, err := fmt.Fprintf(w, "%s.%s\t%s\t%v\t%v\n", table.Database, table.Name, utils.FormatBytes(table.TotalBytes), strings.Join(tableDisks, ","), table.BackupType); err != nil {
 			log.Errorf("fmt.Fprintf write %d bytes return error: %v", bytes, err)
 		}
 	}

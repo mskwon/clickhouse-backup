@@ -3,17 +3,22 @@ package backup
 import (
 	"context"
 	"fmt"
+	"path"
+
 	"github.com/AlexAkulov/clickhouse-backup/pkg/clickhouse"
 	"github.com/AlexAkulov/clickhouse-backup/pkg/config"
 	"github.com/AlexAkulov/clickhouse-backup/pkg/resumable"
 	"github.com/AlexAkulov/clickhouse-backup/pkg/storage"
 	apexLog "github.com/apex/log"
-	"path"
 )
+
+type BackuperOpt func(*Backuper)
 
 type Backuper struct {
 	cfg                    *config.Config
 	ch                     *clickhouse.ClickHouse
+	vers                   versioner
+	bs                     backupSharder
 	dst                    *storage.BackupDestination
 	log                    *apexLog.Entry
 	Version                string
@@ -25,15 +30,33 @@ type Backuper struct {
 	resumableState         *resumable.State
 }
 
-func NewBackuper(cfg *config.Config) *Backuper {
+func NewBackuper(cfg *config.Config, opts ...BackuperOpt) *Backuper {
 	ch := &clickhouse.ClickHouse{
 		Config: &cfg.ClickHouse,
 		Log:    apexLog.WithField("logger", "clickhouse"),
 	}
-	return &Backuper{
-		cfg: cfg,
-		ch:  ch,
-		log: apexLog.WithField("logger", "backuper"),
+	b := &Backuper{
+		cfg:  cfg,
+		ch:   ch,
+		vers: ch,
+		bs:   newReplicaDeterminer(ch, fnvHashModShardFunc),
+		log:  apexLog.WithField("logger", "backuper"),
+	}
+	for _, opt := range opts {
+		opt(b)
+	}
+	return b
+}
+
+func WithVersioner(v versioner) BackuperOpt {
+	return func(b *Backuper) {
+		b.vers = v
+	}
+}
+
+func WithBackupSharder(s backupSharder) BackuperOpt {
+	return func(b *Backuper) {
+		b.bs = s
 	}
 }
 
@@ -75,4 +98,32 @@ func (b *Backuper) getLocalBackupDataPathForTable(backupName string, disk string
 		backupPath = path.Join(b.DiskToPathMap[disk], backupName, "data", dbAndTablePath)
 	}
 	return backupPath
+}
+
+// populateBackupShardField populates the BackupShard field for a slice of Table structs
+func (b *Backuper) populateBackupShardField(ctx context.Context, tables []clickhouse.Table) error {
+	// By default, have all fields populated to full backup
+	for i := range tables {
+		tables[i].BackupType = clickhouse.ShardBackupFull
+	}
+	if !b.cfg.General.ShardedOperation {
+		return nil
+	}
+	if err := canShardOperation(ctx, b.vers); err != nil {
+		return err
+	}
+	assignment, err := b.bs.determineShards(ctx)
+	if err != nil {
+		return err
+	}
+	for i, t := range tables {
+		typ, err := assignment.inShard(t.Database, t.Name)
+		if err != nil {
+			return err
+		}
+		if !typ {
+			tables[i].BackupType = clickhouse.ShardBackupSchema
+		}
+	}
+	return nil
 }

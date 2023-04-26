@@ -366,7 +366,9 @@ general:
   # The format for this env variable is "src_db1:target_db1,src_db2:target_db2". For YAML please continue using map syntax
   restore_database_mapping: {}   
   retries_on_failure: 3          # RETRIES_ON_FAILURE, how many times to retry after a failure during upload or download
-  retries_pause: 30s             # RETRIES_PAUSE, duration time to pause after each download or upload failure 
+  retries_pause: 30s             # RETRIES_PAUSE, duration time to pause after each download or upload failure
+
+  sharded_operation: false       # SHARDED_OPERATION, backups to replicas will save the schema but will only save one replica copy of the data with tables sharded among replicas.
 clickhouse:
   username: default                # CLICKHOUSE_USERNAME
   password: ""                     # CLICKHOUSE_PASSWORD

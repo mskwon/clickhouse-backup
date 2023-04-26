@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/AlexAkulov/clickhouse-backup/pkg/status"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,7 +15,9 @@ import (
 	"github.com/AlexAkulov/clickhouse-backup/pkg/common"
 	"github.com/AlexAkulov/clickhouse-backup/pkg/filesystemhelper"
 	"github.com/AlexAkulov/clickhouse-backup/pkg/metadata"
+	"github.com/AlexAkulov/clickhouse-backup/pkg/status"
 	"github.com/AlexAkulov/clickhouse-backup/pkg/utils"
+
 	apexLog "github.com/apex/log"
 	"github.com/google/uuid"
 	recursiveCopy "github.com/otiai10/copy"
@@ -84,7 +85,6 @@ func (b *Backuper) CreateBackup(backupName, tablePattern string, partitions []st
 	defer cancel()
 
 	startBackup := time.Now()
-	doBackupData := !schemaOnly
 	if backupName == "" {
 		backupName = NewBackupName()
 	}
@@ -117,6 +117,9 @@ func (b *Backuper) CreateBackup(backupName, tablePattern string, partitions []st
 	if i == 0 && !b.cfg.General.AllowEmptyBackups {
 		return fmt.Errorf("no tables for backup")
 	}
+	if err := b.populateBackupShardField(ctx, tables); err != nil {
+		return err
+	}
 
 	allFunctions, err := b.ch.GetUserDefinedFunctions(ctx)
 	if err != nil {
@@ -137,7 +140,7 @@ func (b *Backuper) CreateBackup(backupName, tablePattern string, partitions []st
 	if b.cfg.ClickHouse.UseEmbeddedBackupRestore {
 		err = b.createBackupEmbedded(ctx, backupName, tablePattern, partitions, partitionsToBackupMap, schemaOnly, rbacOnly, configsOnly, tables, allDatabases, allFunctions, disks, diskMap, log, startBackup, version)
 	} else {
-		err = b.createBackupLocal(ctx, backupName, partitionsToBackupMap, tables, doBackupData, schemaOnly, rbacOnly, configsOnly, version, disks, diskMap, allDatabases, allFunctions, log, startBackup)
+		err = b.createBackupLocal(ctx, backupName, partitionsToBackupMap, tables, schemaOnly, rbacOnly, configsOnly, version, disks, diskMap, allDatabases, allFunctions, log, startBackup)
 	}
 	if err != nil {
 		return err
@@ -150,7 +153,7 @@ func (b *Backuper) CreateBackup(backupName, tablePattern string, partitions []st
 	return nil
 }
 
-func (b *Backuper) createBackupLocal(ctx context.Context, backupName string, partitionsToBackupMap common.EmptyMap, tables []clickhouse.Table, doBackupData bool, schemaOnly bool, rbacOnly bool, configsOnly bool, version string, disks []clickhouse.Disk, diskMap map[string]string, allDatabases []clickhouse.Database, allFunctions []clickhouse.Function, log *apexLog.Entry, startBackup time.Time) error {
+func (b *Backuper) createBackupLocal(ctx context.Context, backupName string, partitionsToBackupMap common.EmptyMap, tables []clickhouse.Table, schemaOnly bool, rbacOnly bool, configsOnly bool, version string, disks []clickhouse.Disk, diskMap map[string]string, allDatabases []clickhouse.Database, allFunctions []clickhouse.Function, log *apexLog.Entry, startBackup time.Time) error {
 	// Create backup dir on all clickhouse disks
 	for _, disk := range disks {
 		if err := filesystemhelper.Mkdir(path.Join(disk.Path, "backup"), b.ch, disks); err != nil {
@@ -185,7 +188,7 @@ func (b *Backuper) createBackupLocal(ctx context.Context, backupName string, par
 			}
 			var realSize map[string]int64
 			var disksToPartsMap map[string][]metadata.Part
-			if doBackupData {
+			if !schemaOnly && table.BackupType == clickhouse.ShardBackupFull {
 				log.Debug("create data")
 				shadowBackupUUID := strings.ReplaceAll(uuid.New().String(), "-", "")
 				disksToPartsMap, realSize, err = b.AddTableToBackup(ctx, backupName, shadowBackupUUID, disks, &table, partitionsToBackupMap)
@@ -213,7 +216,7 @@ func (b *Backuper) createBackupLocal(ctx context.Context, backupName string, par
 				TotalBytes:   table.TotalBytes,
 				Size:         realSize,
 				Parts:        disksToPartsMap,
-				MetadataOnly: schemaOnly,
+				MetadataOnly: schemaOnly || table.BackupType == clickhouse.ShardBackupSchema,
 			}, disks)
 			if err != nil {
 				if removeBackupErr := b.RemoveBackupLocal(ctx, backupName, disks); removeBackupErr != nil {
@@ -255,6 +258,10 @@ func (b *Backuper) createBackupLocal(ctx context.Context, backupName string, par
 }
 
 func (b *Backuper) createBackupEmbedded(ctx context.Context, backupName, tablePattern string, partitions []string, partitionsToBackupMap common.EmptyMap, schemaOnly, rbacOnly, configsOnly bool, tables []clickhouse.Table, allDatabases []clickhouse.Database, allFunctions []clickhouse.Function, disks []clickhouse.Disk, diskMap map[string]string, log *apexLog.Entry, startBackup time.Time, backupVersion string) error {
+	// TODO: Implement sharded backup operations for embedded backups
+	if b.cfg.General.ShardedOperation {
+		return fmt.Errorf("cannot perform embedded backup: %w", errShardOperationUnsupported)
+	}
 	if _, isBackupDiskExists := diskMap[b.cfg.ClickHouse.EmbeddedBackupDisk]; !isBackupDiskExists {
 		return fmt.Errorf("backup disk `%s` not exists in system.disks", b.cfg.ClickHouse.EmbeddedBackupDisk)
 	}

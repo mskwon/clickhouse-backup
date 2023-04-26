@@ -3,7 +3,6 @@ package config
 import (
 	"crypto/tls"
 	"fmt"
-	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"math"
 	"os"
 	"runtime"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/apex/log"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/urfave/cli"
 	"gopkg.in/yaml.v3"
@@ -55,6 +55,7 @@ type GeneralConfig struct {
 	WatchInterval           string            `yaml:"watch_interval" envconfig:"WATCH_INTERVAL"`
 	FullInterval            string            `yaml:"full_interval" envconfig:"FULL_INTERVAL"`
 	WatchBackupNameTemplate string            `yaml:"watch_backup_name_template" envconfig:"WATCH_BACKUP_NAME_TEMPLATE"`
+	ShardedOperation        bool              `yaml:"sharded_operation" envconfig:"SHARDED_OPERATION"`
 	RetriesDuration         time.Duration
 	WatchDuration           time.Duration
 	FullDuration            time.Duration
