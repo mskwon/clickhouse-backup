@@ -39,10 +39,11 @@ type backupSharder interface {
 
 // tableReplicaMetadata is data derived from `system.replicas`
 type tableReplicaMetadata struct {
-	Database        string         `db:"database" json:"database"`
-	Table           string         `db:"table" json:"table"`
-	ReplicaName     string         `db:"replica_name" json:"replica_name"`
-	ReplicaIsActive map[string]int `db:"replica_is_active" json:"replica_is_active"`
+	Database    string `db:"database" json:"database"`
+	Table       string `db:"table" json:"table"`
+	ReplicaName string `db:"replica_name" json:"replica_name"`
+	// TODO: Change type to use replica_is_active directly after upgrade to clickhouse-go v2
+	ActiveReplicas []string `db:"active_replicas" json:"replica_is_active"`
 }
 
 // fullName returns the table name in the form of `database.table`
@@ -64,22 +65,16 @@ type shardFunc func(md *tableReplicaMetadata) (bool, error)
 // in an alphabetically sorted list of active replicas which corresponds to the replica that will
 // handle the backup of the table
 func fnvHashModShardFunc(md *tableReplicaMetadata) (bool, error) {
-	activeReplicas := []string{}
-	for replica, active := range md.ReplicaIsActive {
-		if active > 0 {
-			activeReplicas = append(activeReplicas, replica)
-		}
-	}
-	if len(activeReplicas) == 0 {
+	if len(md.ActiveReplicas) == 0 {
 		return false, fmt.Errorf("could not determine in-shard state for %s: %w", md.fullName(),
 			errNoActiveReplicas)
 	}
-	sort.Strings(activeReplicas)
+	sort.Strings(md.ActiveReplicas)
 
 	h := fnv.New32a()
 	h.Write([]byte(md.fullName()))
-	i := h.Sum32() % uint32(len(activeReplicas))
-	return activeReplicas[i] == md.ReplicaName, nil
+	i := h.Sum32() % uint32(len(md.ActiveReplicas))
+	return md.ActiveReplicas[i] == md.ReplicaName, nil
 }
 
 // replicaDeterminer is a concrete struct that will query clickhouse to obtain a shard determination
@@ -101,7 +96,8 @@ func newReplicaDeterminer(q querier, sf shardFunc) *replicaDeterminer {
 // getReplicaState obtains the local replication state through a query to `system.replicas`
 func (rd *replicaDeterminer) getReplicaState(ctx context.Context) ([]tableReplicaMetadata, error) {
 	md := []tableReplicaMetadata{}
-	query := "SELECT database, table, replica_name, replica_is_active FROM system.replicas;"
+	// TODO: Change query to pull replica_is_active after upgrading to clickhouse-go v2
+	query := "select database, table, replica_name, mapKeys(mapFilter((replica, active) -> (active == 1), replica_is_active)) as active_replicas from system.replicas"
 	if err := rd.q.StructSelectContext(ctx, &md, query); err != nil {
 		return nil, fmt.Errorf("could not determine replication state: %w", err)
 	}

@@ -115,64 +115,32 @@ func TestFNVHashModShardFunc(t *testing.T) {
 		expectErr error
 	}{
 		{
-			name: "Test empty replica_is_active",
-			md: &tableReplicaMetadata{
-				Database:        "database",
-				Table:           "table",
-				ReplicaName:     "replica",
-				ReplicaIsActive: map[string]int{},
-			},
-			expectErr: errNoActiveReplicas,
-		},
-		{
 			name: "Test no active replicas",
 			md: &tableReplicaMetadata{
-				Database:    "database",
-				Table:       "table",
-				ReplicaName: "replica",
-				ReplicaIsActive: map[string]int{
-					"replica": 0,
-					"a":       0,
-					"b":       0,
-				},
+				Database:       "database",
+				Table:          "table",
+				ReplicaName:    "replica",
+				ActiveReplicas: []string{},
 			},
 			expectErr: errNoActiveReplicas,
 		},
 		{
 			name: "Test single active replica",
 			md: &tableReplicaMetadata{
-				Database:    "database",
-				Table:       "table",
-				ReplicaName: "replica",
-				ReplicaIsActive: map[string]int{
-					"replica": 1,
-				},
-			},
-			expect: true,
-		},
-		{
-			name: "Test single active replica out of many replica_is_active",
-			md: &tableReplicaMetadata{
-				Database:    "database",
-				Table:       "table",
-				ReplicaName: "replica",
-				ReplicaIsActive: map[string]int{
-					"replica": 1,
-					"a":       0,
-					"b":       0,
-				},
+				Database:       "database",
+				Table:          "table",
+				ReplicaName:    "replica",
+				ActiveReplicas: []string{"replica"},
 			},
 			expect: true,
 		},
 		{
 			name: "Test not assigned replica",
 			md: &tableReplicaMetadata{
-				Database:    "database",
-				Table:       "table",
-				ReplicaName: "replica",
-				ReplicaIsActive: map[string]int{
-					"different": 1,
-				},
+				Database:       "database",
+				Table:          "table",
+				ReplicaName:    "replica",
+				ActiveReplicas: []string{"different"},
 			},
 		},
 	}
@@ -207,18 +175,16 @@ func (tq *testQuerier) StructSelectContext(_ context.Context, dest any, _ string
 func TestGetReplicaState(t *testing.T) {
 	data := []tableReplicaMetadata{
 		{
-			Database:        "db",
-			Table:           "table",
-			ReplicaName:     "replica",
-			ReplicaIsActive: map[string]int{},
+			Database:       "db",
+			Table:          "table",
+			ReplicaName:    "replica",
+			ActiveReplicas: []string{},
 		},
 		{
-			Database:    "db2",
-			Table:       "table2",
-			ReplicaName: "replica2",
-			ReplicaIsActive: map[string]int{
-				"replica2": 0,
-			},
+			Database:       "db2",
+			Table:          "table2",
+			ReplicaName:    "replica2",
+			ActiveReplicas: []string{"replica2"},
 		},
 	}
 	expectedErr := errors.New("expected error")
