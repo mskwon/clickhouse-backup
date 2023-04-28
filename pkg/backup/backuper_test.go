@@ -42,6 +42,7 @@ func TestPopulateBackupShardField(t *testing.T) {
 			{
 				Database: "b",
 				Name:     "present",
+				Skip:     true,
 			},
 		}
 	}
@@ -52,7 +53,6 @@ func TestPopulateBackupShardField(t *testing.T) {
 		data: shardDetermination{
 			"a.present": true,
 			"a.absent":  false,
-			"b.present": true,
 		},
 	}
 	emptySharder := &testBackupSharder{
@@ -100,7 +100,8 @@ func TestPopulateBackupShardField(t *testing.T) {
 				{
 					Database:   "b",
 					Name:       "present",
-					BackupType: clickhouse.ShardBackupFull,
+					Skip:       true,
+					BackupType: clickhouse.ShardBackupNone,
 				},
 			},
 		},
@@ -137,7 +138,8 @@ func TestPopulateBackupShardField(t *testing.T) {
 				{
 					Database:   "b",
 					Name:       "present",
-					BackupType: clickhouse.ShardBackupFull,
+					Skip:       true,
+					BackupType: clickhouse.ShardBackupNone,
 				},
 			},
 		},

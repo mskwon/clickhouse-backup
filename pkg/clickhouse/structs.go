@@ -7,8 +7,9 @@ import (
 type ShardBackupType string
 
 const (
-	ShardBackupSchema = "schema-only"
 	ShardBackupFull   = "full"
+	ShardBackupNone   = "none"
+	ShardBackupSchema = "schema-only"
 )
 
 // Table - ClickHouse table struct

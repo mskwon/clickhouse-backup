@@ -105,6 +105,9 @@ func (b *Backuper) populateBackupShardField(ctx context.Context, tables []clickh
 	// By default, have all fields populated to full backup
 	for i := range tables {
 		tables[i].BackupType = clickhouse.ShardBackupFull
+		if tables[i].Skip {
+			tables[i].BackupType = clickhouse.ShardBackupNone
+		}
 	}
 	if !b.cfg.General.ShardedOperation {
 		return nil
@@ -117,6 +120,10 @@ func (b *Backuper) populateBackupShardField(ctx context.Context, tables []clickh
 		return err
 	}
 	for i, t := range tables {
+		if t.Skip {
+			tables[i].BackupType = clickhouse.ShardBackupNone
+			continue
+		}
 		typ, err := assignment.inShard(t.Database, t.Name)
 		if err != nil {
 			return err
