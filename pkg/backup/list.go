@@ -369,7 +369,7 @@ func (b *Backuper) GetRemoteBackups(ctx context.Context, parseMetadata bool) ([]
 	return backupList, err
 }
 
-// GetTables - get all tables for use by PrintTables and API
+// GetTables - get all tables for use by CreateBackup, PrintTables, and API
 func (b *Backuper) GetTables(ctx context.Context, tablePattern string) ([]clickhouse.Table, error) {
 	if !b.ch.IsOpen {
 		if err := b.ch.Connect(); err != nil {
@@ -381,6 +381,9 @@ func (b *Backuper) GetTables(ctx context.Context, tablePattern string) ([]clickh
 	allTables, err := b.ch.GetTables(ctx, tablePattern)
 	if err != nil {
 		return []clickhouse.Table{}, fmt.Errorf("can't get tables: %v", err)
+	}
+	if err := b.populateBackupShardField(ctx, allTables); err != nil {
+		return nil, err
 	}
 	return allTables, nil
 }

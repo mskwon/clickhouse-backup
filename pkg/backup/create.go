@@ -102,9 +102,9 @@ func (b *Backuper) CreateBackup(backupName, tablePattern string, partitions []st
 	if err != nil {
 		return fmt.Errorf("can't get database engines from clickhouse: %v", err)
 	}
-	allTables, err := b.ch.GetTables(ctx, tablePattern)
+	allTables, err := b.GetTables(ctx, tablePattern)
 	if err != nil {
-		return fmt.Errorf("can't get tables from clickhouse: %v", err)
+		return err
 	}
 	tables := filterTablesByPattern(allTables, tablePattern)
 	i := 0
@@ -116,9 +116,6 @@ func (b *Backuper) CreateBackup(backupName, tablePattern string, partitions []st
 	}
 	if i == 0 && !b.cfg.General.AllowEmptyBackups {
 		return fmt.Errorf("no tables for backup")
-	}
-	if err := b.populateBackupShardField(ctx, tables); err != nil {
-		return err
 	}
 
 	allFunctions, err := b.ch.GetUserDefinedFunctions(ctx)
